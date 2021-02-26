@@ -1,0 +1,46 @@
+remove:
+- /openldap/static-role//{prefix}
+- /secret/.*
+- /transit/hash/{urlalgorithm}
+- /transit/hmac/{name}/{urlalgorithm}
+- /transit/random/{urlbytes}
+- /transit/restore/{name}
+- /transit/sign/{name}/{urlalgorithm}
+- /transit/verify/{name}/{urlalgorithm}
+- /mssql/
+- /mongodb/
+- /mysql/
+- /cassandra/
+- /postgresql/
+  # temporary below
+- /sys/
+- /auth/
+- /identity/
+- /kv/
+- /pki/
+
+nameoverride:
+  /ad/roles/{name}: AdRole
+  /ad/library: AdLibraries
+  /alicloud/role: AlicloudRoles
+  /aws/roles/{name}: AwsRole
+  /azure/roles/{name}: AzureRole
+  /consul/roles/{name}: ConsulRole
+  /cubbyhole/{path}: CubbyholeSecret
+  /database/config: DatabaseConfigs
+  /database/roles/{name}: DatabaseRole
+  /database/static-roles/{name}: DatabaseStaticRole
+  /gcpkms/keys/{key}: GcpkmsKey
+  /mongodbatlas/roles/{name}: MongodbatlasRole
+  /nomad/role: NomadRoles
+  /openldap/role: OpenldapRoles
+  /openldap/static-role/: OpenldapStaticRoles
+  /rabbitmq/roles/{name}: RabbitmqRole
+  /ssh/roles/{role}: SshRole
+  /terraform/role: TerraformRoles
+  /totp/keys/{name}: TotpKey
+  /transit/export/{type}/{name}/{version}: TransitExportVersion
+  /transit/keys/{name}: TransitKey
+  /transit/keys/{name}/config: TransitKeyConfig
+  /transit/keys/{name}/rotate: TransitKeyRotate
+  /transit/keys/{name}/trim: TransitKeyTrim

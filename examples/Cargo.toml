@@ -1,0 +1,13 @@
+[package]
+name = "examples"
+version = "0.1.0"
+authors = ["pbar1 <pbar1@users.noreply.github.com>"]
+publish = false
+edition = "2018"
+
+[dev-dependencies]
+vault = { path = "../vault", version = "0.1.0"}
+
+[[example]]
+name = "basic"
+path = "basic.rs"

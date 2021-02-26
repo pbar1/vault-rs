@@ -2,43 +2,117 @@ import yaml
 import json
 import sys
 import re
+from urllib.parse import quote
+from copy import deepcopy
+
+def eprint(*args, **kwargs):
+    # prints to stderr
+    print(*args, file=sys.stderr, **kwargs)
 
 
 def pascal(s: str) -> str:
+    # converts string to PascalCase
     return ''.join(x for x in s.title() if not x.isspace())
 
 
-with open('patches/patchcfg.yaml') as f:
+def uniqopid(s: str) -> str:
+    # converts string like:
+    #   /auth/token/lookup-self -> AuthTokenLookupSelf
+    #   /auth/token/roles/{role_name} -> AuthTokenRoles
+    # NOTE: there will be duplicates under this scheme. use nameoverride for those paths
+    return pascal(re.sub(r'{.+?}', '', s).replace('/', ' ').replace('-', ' ').replace('_', ' '))
+
+
+def jpesc(s: str) -> str:
+    # escapes a string for use in a json pointer
+    return s.replace('~', '~0').replace('/', '~1')
+
+
+def pctencode(s: str) -> str:
+    return quote(s).replace('%23', '#', 1)
+
+
+def respcontent(data: dict):
+    return {
+        "application/json": {
+            "schema": {
+                "type": "object",
+                "title": "VaultResponse",
+                "properties": {
+                    "request_id": {
+                        "type": "string"
+                    },
+                    "lease_id": {
+                        "type": "string"
+                    },
+                    "renewable": {
+                        "type": "boolean"
+                    },
+                    "lease_duration": {
+                        "type": "integer"
+                    },
+                    "data": data,
+                    "wrap_info": {
+                        "type": "object"
+                    },
+                    "warnings": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "auth": {
+                        "type": "object"
+                    },
+                }
+            }
+        }
+    }
+
+
+# read patch configuration
+with open('patchcfg.yaml') as f:
     patchcfg = yaml.full_load(f)
 
-data = json.load(sys.stdin)
+# load openapi spec from stdin
+spec = json.load(sys.stdin)
 
-for p in data['paths']:
+# remove any paths from the spec marked for removal
+for p in spec['paths'].copy():
+    for prefix in patchcfg['remove']:
+        if p.startswith(prefix):
+            # eprint(f'{p} => removing')
+            del spec['paths'][p]
 
-    # delete any paths marked for removal
-    if p in patchcfg['remove']:
-        del data['paths'][p]
-        continue
+# enrich spec with overrides
+for p in spec['paths']:
 
-    if p in patchcfg['nameoverride']:
-        opid = pascal(patchcfg['nameoverride'][p])
-        title = opid + 'Input'
+    # build operation id and request body schema title
+    overridden = False
+    if p in patchcfg['nameoverride'].keys():
+        overridden = True
+        opid = patchcfg['nameoverride'][p]
     else:
-        # create clean, title-cased name from the path
-        opid = pascal(re.sub(r'[^a-zA-Z0-9]', ' ', p))
-        title = pascal(re.sub(r'{.+?}', '', p).replace('/', ' ').replace('-', ' ').replace('_', ' ')) + 'Input'
+        opid = uniqopid(p)
+    # title = opid+'Input'
+    eprint(f'{p},{opid},{overridden}')
 
     # set operation ids to cleaner names
     for op in ['get', 'delete', 'post']:
-        if op in data['paths'][p]:
-            data['paths'][p][op]['operationId'] = op + opid
+        if op in spec['paths'][p]:
+            spec['paths'][p][op]['operationId'] = op+opid
 
             # add titles to request body schemas so generated models have proper names
             if op == 'post' \
-                    and 'requestBody' in data['paths'][p][op] \
-                    and 'content' in data['paths'][p][op]['requestBody'] \
-                    and 'application/json' in data['paths'][p][op]['requestBody']['content'] \
-                    and 'schema' in data['paths'][p][op]['requestBody']['content']['application/json']:
-                data['paths'][p][op]['requestBody']['content']['application/json']['schema']['title'] = op + title
+                    and 'requestBody' in spec['paths'][p][op] \
+                    and 'content' in spec['paths'][p][op]['requestBody'] \
+                    and 'application/json' in spec['paths'][p][op]['requestBody']['content'] \
+                    and 'schema' in spec['paths'][p][op]['requestBody']['content']['application/json']:
+                spec['paths'][p][op]['requestBody']['content']['application/json']['schema']['title'] = f'{opid}Input'
+                if 'get' in spec['paths'][p]:
+                    spec['paths'][p]['get']['responses']['200']['content'] = \
+                        deepcopy(spec['paths'][p]['post']['requestBody']['content'])
+                    spec['paths'][p]['get']['responses']['200']['content']['application/json']['schema']['title'] = opid
 
-print(json.dumps(data, indent=2))
+# pretty-print processed spec to sdout
+print(json.dumps(spec, indent=2))
